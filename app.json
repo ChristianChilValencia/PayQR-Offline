@@ -1,25 +1,43 @@
 {
   "expo": {
-    "name": "OFFLINE-GCASH-QR-EXPO",
-    "slug": "OFFLINE-GCASH-QR-EXPO",
+    "name": "BluePeso",
+    "slug": "bluepeso",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "ios": {
-      "supportsTablet": true
-    },
     "android": {
+      "package": "com.bluepeso.helper",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#11274a"
       },
-      "predictiveBackGestureEnabled": false
+      "blockedPermissions": ["android.permission.RECORD_AUDIO"]
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Choose payment QR images.",
+          "savePhotosPermission": "Save a payment card PNG.",
+          "granularPermissions": ["photo"]
+        }
+      ],
+      "expo-sharing",
+      "expo-router"
+    ]
   }
 }
