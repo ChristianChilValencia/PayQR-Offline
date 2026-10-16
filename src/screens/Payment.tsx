@@ -196,7 +196,7 @@ export function Payment({
           )}
           <View style={s.row}>
             {!snapshot ? <View style={{ flex: 1 }}><Action title="Open Settings" icon="settings" disabled={busy || exporting} onPress={importQR} /></View> : <>
-              <View style={{ flex: 1 }}><IconAction name="Share PNG" icon="share" expanded disabled={valid === null || exporting} onPress={() => { void exportPNG("share"); }} /></View>
+              <View style={{ flex: 1 }}><IconAction name="Share QR" icon="share" expanded disabled={valid === null || exporting} onPress={() => { void exportPNG("share"); }} /></View>
               <IconAction name="Download" icon="download" disabled={valid === null || exporting} onPress={() => { void exportPNG("save"); }} />
             </>}
           </View>
@@ -204,7 +204,7 @@ export function Payment({
         {children}
       </View>
       {!history && (
-        <View style={[s.dock, { backgroundColor: "transparent", borderTopWidth: 0 }]}>
+        <View style={[s.dock, { backgroundColor: "transparent", borderTopWidth: 0, paddingHorizontal: 14 }]}>
           <View style={s.row}>
             <View
               style={{
@@ -215,6 +215,7 @@ export function Payment({
                 borderColor: "#9bb1cd",
                 borderRadius: 12,
                 paddingLeft: 10,
+                height: 56,
                 backgroundColor: "white",
               }}
             >
@@ -232,6 +233,8 @@ export function Payment({
                 maxLength={12}
                 style={{
                   flex: 1,
+                  minHeight: 54,
+                  height: 54,
                   minWidth: 0,
                   paddingHorizontal: 0,
                   borderWidth: 0,
@@ -308,7 +311,7 @@ export function IconAction({
         style={[s.button, { width: expanded ? "100%" : 48, flexDirection: "row", gap: 8 }, disabled && { opacity: 0.4 }]}
       >
         <AppIcon name={icon === "copy" && copied ? "check" : icon} color="white" size={23} />
-        {expanded && <Text style={s.buttonText}>{icon === "share" ? "Share" : name}</Text>}
+        {expanded && <Text style={s.buttonText}>{name}</Text>}
       </Pressable>
       {tip && (
         <Text
@@ -327,7 +330,7 @@ export function IconAction({
             },
           ]}
         >
-          {name}
+          {icon === "share" ? "Share QR as PNG" : name}
         </Text>
       )}
     </View>
@@ -392,7 +395,7 @@ export function StepButton({
       }}
       style={[
         s.button,
-        { width: 48, backgroundColor: "transparent", borderWidth: 1, borderColor: "#9bb1cd" },
+        { width: 56, height: 56, borderRadius: 12, backgroundColor: "transparent", borderWidth: 1, borderColor: "#9bb1cd" },
         disabled && { opacity: 0.4 },
       ]}
     >

@@ -3,6 +3,7 @@ import { act, create, ReactTestRenderer } from "react-test-renderer";
 import { AppState } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { QRImportCamera } from "../src/screens/QRImportCamera";
+import { BottomSheet } from "../src/screens/BottomSheet";
 import { Action } from "../src/screens/common";
 import { fixture } from "./fixture";
 
@@ -41,6 +42,8 @@ test("denied permission does not mount the camera", async () => {
   jest.mocked(useCameraPermissions).mockReturnValueOnce([{ granted: false, canAskAgain: true }, request] as never);
   await act(async () => { tree = create(<QRImportCamera onImport={jest.fn()} onClose={jest.fn()} />); });
   expect(tree.root.findAllByType(CameraView)).toHaveLength(0);
+  expect(tree.root.findByType(BottomSheet).props.tall).toBeUndefined();
+  expect(tree.root.findByType(BottomSheet).props.title).toBe("Allow camera access");
   await act(async () => tree.root.findAllByType(Action).find(n => n.props.title === "Allow camera")!.props.onPress());
   expect(request).toHaveBeenCalledTimes(1);
 });

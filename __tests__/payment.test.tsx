@@ -51,7 +51,7 @@ test("non-whole inputs are rejected and zero permits original QR export", async 
     tree = renderer.create(<Payment {...props} />);
   });
   expect(
-    tree!.root.findAllByType(IconAction).find((a) => a.props.name === "Share PNG")
+    tree!.root.findAllByType(IconAction).find((a) => a.props.name === "Share QR")
       ?.props.disabled,
   ).toBe(false);
   await act(async () => {
@@ -62,7 +62,7 @@ test("non-whole inputs are rejected and zero permits original QR export", async 
   expect(
     tree!.root
       .findAllByType(Action)
-      .filter((a) => ["+ ₱1", "− ₱1", "Share PNG"].includes(a.props.title))
+      .filter((a) => ["+ ₱1", "− ₱1", "Share QR"].includes(a.props.title))
       .every((a) => a.props.disabled),
   ).toBe(true);
   await act(async () => {
@@ -101,7 +101,7 @@ test("asynchronous export freezes QR and labels while active record changes", as
   await act(async () => {
     tree!.root
       .findAllByType(IconAction)
-      .find((a) => a.props.name === "Share PNG")!
+      .find((a) => a.props.name === "Share QR")!
       .props.onPress();
   });
   await act(async () => {
@@ -217,10 +217,10 @@ test("hold repeats after 400ms every 150ms and release, cancellation and unmount
 test("long press shows an icon tooltip without exporting", async () => {
   const onPress = jest.fn();
   let tree: renderer.ReactTestRenderer;
-  await act(async () => { tree = renderer.create(<IconAction name="Share PNG" icon="share" disabled={false} onPress={onPress} />); });
+  await act(async () => { tree = renderer.create(<IconAction name="Share QR" icon="share" disabled={false} onPress={onPress} />); });
   const button = tree!.root.findAll(node => node.props.accessibilityRole === "button" && typeof node.props.onPressIn === "function")[0];
   act(() => { button.props.onPressIn(); button.props.onLongPress(); });
-  expect(JSON.stringify(tree!.toJSON())).toContain("Share PNG");
+  expect(JSON.stringify(tree!.toJSON())).toContain("Share QR");
   act(() => { button.props.onPressOut(); button.props.onPress(); });
   expect(onPress).not.toHaveBeenCalled();
   act(() => { tree!.unmount(); });
@@ -273,7 +273,7 @@ test("export buttons stay enabled while a complete amount is being saved", async
   let tree!: renderer.ReactTestRenderer;
   await act(async () => { tree = renderer.create(<Payment record={{ ...initial, cents: 0, recipient: { payload, validation: validateQR(payload) } }} update={update} importQR={jest.fn()} busy={false} cancel={jest.fn()} report={jest.fn()} />); });
   await act(async () => tree.root.findByType(TextInput).props.onChangeText("25"));
-  expect(tree.root.findAllByType(IconAction).map(button => button.props.name)).toEqual(["Share PNG", "Download"]);
+  expect(tree.root.findAllByType(IconAction).map(button => button.props.name)).toEqual(["Share QR", "Download"]);
   expect(tree.root.findAllByType(IconAction).every(button => !button.props.disabled)).toBe(true);
   expect(tree.root.findByType("qr" as any).props.value).toBe(rewriteAmount(payload, 2500));
   await act(async () => finish());
@@ -317,7 +317,7 @@ test("Receive has a wide Share button, no Reset, and an amount clear control", a
   let tree!: renderer.ReactTestRenderer;
   await act(async () => { tree = renderer.create(<Payment record={{ ...initial, recipient: { payload, validation: validateQR(payload) } }} update={jest.fn()} importQR={jest.fn()} busy={false} cancel={jest.fn()} report={jest.fn()} />); });
   expect(tree.root.findAllByType(Action).some(n => n.props.title === "Reset")).toBe(false);
-  expect(tree.root.findAllByType(IconAction).find(n => n.props.name === "Share PNG")!.props.expanded).toBe(true);
+  expect(tree.root.findAllByType(IconAction).find(n => n.props.name === "Share QR")!.props.expanded).toBe(true);
   expect(tree.root.findByType(Input).props.clearable).toBe(false);
   expect(tree.root.findByType(Input).props.clearLabel).toBe("Clear amount");
   await act(async () => tree.unmount());

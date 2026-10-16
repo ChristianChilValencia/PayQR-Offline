@@ -242,7 +242,7 @@ export function SettingsPage() {
               <View style={s.row}>
                 <View style={{ flex: 1 }}><Action icon="check" title={q.id === app.record.activeQR ? "Activated" : "Activate"} disabled={q.id === app.record.activeQR} onPress={() => run(() => app.patch((r) => ({ ...r, activeQR: q.id, recipient: q })))} /></View>
                 <IconAction name="Download" icon="download" disabled={exporting} onPress={() => startExport(q, "save")} />
-                <IconAction name="Share PNG" icon="share" disabled={exporting} onPress={() => startExport(q, "share")} />
+                <IconAction name="Share QR" icon="share" disabled={exporting} onPress={() => startExport(q, "share")} />
               </View>
             </View>
           </SavedRow>

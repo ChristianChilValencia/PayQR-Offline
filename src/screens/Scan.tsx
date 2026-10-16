@@ -15,6 +15,7 @@ import { saveApp, saveNumber } from "../domain/state";
 import { findPhones } from "../domain/core";
 import { ocrAvailable, recognizeText } from "../services/ocr";
 import { Numbers } from "./Numbers";
+import { BottomSheet } from "./BottomSheet";
 import { Action, styles as s } from "./common";
 
 export function Scan() {
@@ -109,25 +110,16 @@ export function Scan() {
       ) : !permission ? (
         <ActivityIndicator accessibilityLabel="Loading camera permission" />
       ) : !permission.granted ? (
-        <>
-          <Text style={s.text}>
-            Camera permission is required to capture numbers.
-          </Text>
-          <Action
-            title={
-              permission.canAskAgain ? "Allow camera" : "Open system settings"
-            }
-            onPress={() => {
-              void (
-                permission.canAskAgain
-                  ? requestPermission()
-                  : Linking.openSettings()
-              ).catch(() =>
-                setError("Could not open camera permissions. Try again."),
-              );
-            }}
-          />
-        </>
+        <BottomSheet visible onClose={cancel} title="Allow camera access" icon="camera">
+          <Text style={s.text}>Camera permission is required to capture numbers.</Text>
+          {!!error && <Text style={s.error}>{error}</Text>}
+          <View style={s.row}>
+            <View style={{ flex: 1 }}><Action title="Cancel" variant="secondary" onPress={cancel} /></View>
+            <View style={{ flex: 1 }}><Action title={permission.canAskAgain ? "Allow camera" : "Open system settings"} onPress={() => {
+              void (permission.canAskAgain ? requestPermission() : Linking.openSettings()).catch(() => setError("Could not open camera permissions. Try again."));
+            }} /></View>
+          </View>
+        </BottomSheet>
       ) : processing ? (
         <>
           <ActivityIndicator accessibilityLabel="Recognizing numbers" />

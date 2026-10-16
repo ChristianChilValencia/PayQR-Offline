@@ -157,7 +157,7 @@ test("web exports an unselected QR directly without a sheet or selection change"
   try {
     await act(async () => { tree = create(<SettingsPage />); });
     const otherRow = tree.root.findAllByType(SavedRow)[1];
-    for (const [name, mode] of [["Download", "save"], ["Share PNG", "share"]]) {
+    for (const [name, mode] of [["Download", "save"], ["Share QR", "share"]]) {
       await act(async () => otherRow.findAllByType(IconAction).find(n => n.props.name === name)!.props.onPress());
       expect(exportPaymentCard).toHaveBeenLastCalledWith(expect.objectContaining({ payload: other.payload, label: "Other shop", cents: 0 }), mode);
     }

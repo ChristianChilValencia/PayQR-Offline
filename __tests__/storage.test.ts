@@ -12,7 +12,10 @@ jest.mock("expo-crypto", () => {
       generate: async () => ({ encoded: async () => crypto.randomBytes(32).toString("hex") }),
       import: async (hex: string) => Buffer.from(hex, "hex"),
     },
-    AESSealedData: { fromCombined: (base64: string) => Buffer.from(base64, "base64") },
+    AESSealedData: { fromCombined: (bytes: Uint8Array) => {
+      if (!(bytes instanceof Uint8Array)) throw new Error("Android requires bytes");
+      return Buffer.from(bytes);
+    } },
     aesEncryptAsync: async (bytes: Uint8Array, key: Buffer) => {
       const iv = crypto.randomBytes(12);
       const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
@@ -86,5 +89,38 @@ test("tampering fails authentication and never falls back to old history", async
   const bytes = Buffer.from(encrypted.slice(prefix.length), "base64");
   bytes[12] ^= 1;
   await expect(readStoredValue(prefix + bytes.toString("base64"))).rejects.toThrow();
+  expect(values.get("payqr.v1")).toBe(encrypted);
+});
+
+
+test("a cold module reload reads retained ciphertext and key without rotating either", async () => {
+  const plaintext = JSON.stringify({ version: 3, label: "Recipient", cents: 12345 });
+  await writeStoredValue(plaintext);
+  const encrypted = values.get("payqr.v1")!;
+  const savedKey = key;
+  // Reload the service while retaining only the persistent platform adapters.
+  jest.resetModules();
+  const persistedKeyStore = jest.requireMock<typeof SecureStore>("expo-secure-store");
+  jest.mocked(persistedKeyStore.getItemAsync).mockImplementation(async () => key);
+  const restarted = jest.requireActual<typeof import("../src/services/storage")>("../src/services/storage");
+  await expect(restarted.readStoredValue(encrypted)).resolves.toBe(plaintext);
+  expect(values.get("payqr.v1")).toBe(encrypted);
+  expect(key).toBe(savedKey);
+});
+
+test("a locked device can retry without changing retained history", async () => {
+  await writeStoredValue('{"cents":250}');
+  const encrypted = values.get("payqr.v1")!;
+  jest.mocked(SecureStore.getItemAsync).mockRejectedValueOnce(new Error("Locked"));
+  await expect(readStoredValue(encrypted)).rejects.toThrow("Locked");
+  await expect(readStoredValue(encrypted)).resolves.toBe('{"cents":250}');
+  expect(values.get("payqr.v1")).toBe(encrypted);
+});
+
+test.each(["!invalid!", "YQ==", ""])("malformed encrypted data is retained: %s", async (data) => {
+  await writeStoredValue("{}");
+  const encrypted = "payqr:aes-gcm:1:" + data;
+  values.set("payqr.v1", encrypted);
+  await expect(readStoredValue(encrypted)).rejects.toThrow();
   expect(values.get("payqr.v1")).toBe(encrypted);
 });
