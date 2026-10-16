@@ -1,4 +1,4 @@
-import { savePNGToGallery } from "../src/services/gallery";
+import { paymentPNGFilename, savePNGToGallery } from "../src/services/gallery";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Platform } from "react-native";
 
@@ -28,4 +28,9 @@ test("Android Expo Go never loads the restricted media library", async () => {
     Platform.OS = originalOS;
     Constants.executionEnvironment = originalEnvironment;
   }
+});
+
+
+test("PNG filename uses a padded local date/time, milliseconds, and a safe PNG extension", () => {
+  expect(paymentPNGFilename(new Date(2026, 0, 2, 3, 4, 5, 6))).toBe("payqr_2026-01-02_03-04-05-006.png");
 });

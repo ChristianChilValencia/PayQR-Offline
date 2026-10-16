@@ -1,5 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
+import { fixture } from "./fixture";
+import { initial, migrate, hydrate, saveNumber, SerialStore } from "../src/domain/state";
+import { validateQR } from "../src/domain/core";
 import { readStoredValue, writeStoredValue } from "../src/services/storage";
 
 jest.mock("@react-native-async-storage/async-storage", () => ({ getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() }));
@@ -123,4 +126,62 @@ test.each(["!invalid!", "YQ==", ""])("malformed encrypted data is retained: %s",
   values.set("payqr.v1", encrypted);
   await expect(readStoredValue(encrypted)).rejects.toThrow();
   expect(values.get("payqr.v1")).toBe(encrypted);
+});
+
+
+test.each([0, 1, 2, 3, 1024, 1024 * 1024])("encrypted history survives all base64 padding sizes and large records (%i bytes)", async (length) => {
+  const plaintext = JSON.stringify({ label: "x".repeat(length) + "\u00e9\ud83e\uddfe" });
+  await writeStoredValue(plaintext);
+  await expect(readStoredValue(values.get("payqr.v1")!)).resolves.toBe(plaintext.replace(/[\u007f-\uffff]/g, char => "\\u" + char.charCodeAt(0).toString(16).padStart(4, "0")));
+});
+
+test("saved QR, numbers, labels and amount survive 30 serialized writes and encrypted reloads", async () => {
+  const payload = fixture();
+  let record = migrate({ ...initial, cents: 12345, recipient: { image: "file:///legacy.png", payload, validation: validateQR(payload), label: "Test recipient" } });
+  const store = new SerialStore(writeStoredValue);
+  await store.save(record);
+  const originalKey = key;
+  for (let i = 0; i < 30; i++) {
+    record = saveNumber(record, "09171234567", "manual", "Test number");
+    record = { ...record, cents: record.cents + 1 };
+    await store.save(record);
+    const reopened = hydrate((await readStoredValue(values.get("payqr.v1")!))!);
+    expect(reopened).toEqual(record);
+    expect(key).toBe(originalKey);
+  }
+});
+
+test("wrong device key rejects history without writing or falling back", async () => {
+  await writeStoredValue("{}");
+  const encrypted = values.get("payqr.v1")!;
+  const originalKey = key;
+  key = "ab".repeat(32);
+  await expect(readStoredValue(encrypted)).rejects.toThrow();
+  expect(values.get("payqr.v1")).toBe(encrypted);
+  key = originalKey;
+  await expect(readStoredValue(encrypted)).resolves.toBe("{}");
+});
+
+
+test("legacy cleanup failure does not report a committed encrypted save as failed", async () => {
+  values.set("bluepeso.v1", "legacy recovery source");
+  jest.mocked(AsyncStorage.removeItem).mockRejectedValueOnce(new Error("Cleanup unavailable"));
+  await expect(writeStoredValue('{"cents":123}')).resolves.toBeUndefined();
+  await expect(readStoredValue(values.get("payqr.v1")!)).resolves.toBe('{"cents":123}');
+  expect(values.has("bluepeso.v1")).toBe(true);
+  await writeStoredValue('{"cents":124}');
+  expect(values.has("bluepeso.v1")).toBe(false);
+});
+
+test("failed encrypted update keeps the previous committed record and key readable", async () => {
+  await writeStoredValue('{"cents":123}');
+  const previous = values.get("payqr.v1")!;
+  const previousKey = key;
+  jest.mocked(AsyncStorage.setItem).mockRejectedValueOnce(new Error("Disk full"));
+  await expect(writeStoredValue('{"cents":456}')).rejects.toThrow("Disk full");
+  expect(values.get("payqr.v1")).toBe(previous);
+  expect(key).toBe(previousKey);
+  await expect(readStoredValue(previous)).resolves.toBe('{"cents":123}');
+  await writeStoredValue('{"cents":456}');
+  await expect(readStoredValue(values.get("payqr.v1")!)).resolves.toBe('{"cents":456}');
 });

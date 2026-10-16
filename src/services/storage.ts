@@ -51,5 +51,7 @@ export async function writeStoredValue(value: string): Promise<void> {
   const sealed = await aesEncryptAsync(Uint8Array.from(ascii, (char) => char.charCodeAt(0)), key);
   await AsyncStorage.setItem("payqr.v1", PREFIX + await sealed.combined("base64"));
   // Never remove the recovery source until the encrypted write succeeds.
-  await AsyncStorage.removeItem("bluepeso.v1");
+  // The ciphertext is already committed. A stale legacy copy is safe because
+  // reads prefer payqr.v1; cleanup failure must not roll back the in-memory state.
+  await AsyncStorage.removeItem("bluepeso.v1").catch(() => {});
 }

@@ -28,6 +28,7 @@ jest.mock("@react-native-async-storage/async-storage", () => ({
 jest.mock("../src/services/storage", () => jest.requireActual("../src/services/storage.web"));
 jest.mock("expo-file-system/legacy", () => ({
   documentDirectory: "file:///private/",
+  cacheDirectory: "file:///cache/",
   copyAsync: jest.fn(),
   deleteAsync: jest.fn().mockResolvedValue(undefined),
   getInfoAsync: jest.fn(),
@@ -131,7 +132,10 @@ test("gallery denial never saves, successful grant saves PNG", async () => {
   expect(Media.requestPermissionsAsync).toHaveBeenLastCalledWith(true, [
     "photo",
   ]);
-  expect(Media.saveToLibraryAsync).toHaveBeenCalledWith("file:///a.png");
+  const destination = jest.mocked(FS.copyAsync).mock.calls.at(-1)![0].to;
+  expect(destination).toMatch(/^file:\/\/\/cache\/payqr_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d{3}\.png$/);
+  expect(Media.saveToLibraryAsync).toHaveBeenCalledWith(destination);
+  expect(FS.deleteAsync).toHaveBeenCalledWith(destination, { idempotent: true });
 });
 test("sharing unavailable surfaces error", async () => {
   jest.mocked(Sharing.isAvailableAsync).mockResolvedValue(false);
@@ -178,4 +182,22 @@ test("oversized QR images are rejected before decoding", async () => {
   });
   await expect(pickQR()).rejects.toThrow("too large");
   expect(Camera.scanFromURLAsync).not.toHaveBeenCalled();
+});
+
+
+test("failed gallery save cleans the named copy and preserves the original capture", async () => {
+  jest.mocked(Media.requestPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest.mocked(Media.saveToLibraryAsync).mockRejectedValueOnce(new Error("Gallery full"));
+  await expect(savePNG("file:///original.png")).rejects.toThrow("Gallery full");
+  const destination = jest.mocked(FS.copyAsync).mock.calls.at(-1)![0].to;
+  expect(FS.deleteAsync).toHaveBeenCalledWith(destination, { idempotent: true });
+  expect(FS.deleteAsync).not.toHaveBeenCalledWith("file:///original.png", expect.anything());
+});
+
+test("copy failure never saves a partial PNG and allows retry", async () => {
+  jest.mocked(Media.requestPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest.mocked(FS.copyAsync).mockRejectedValueOnce(new Error("Disk full"));
+  await expect(savePNG("file:///original.png")).rejects.toThrow("Disk full");
+  expect(Media.saveToLibraryAsync).not.toHaveBeenCalled();
+  await expect(savePNG("file:///original.png")).resolves.toBeUndefined();
 });
