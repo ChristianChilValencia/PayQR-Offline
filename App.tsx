@@ -7,17 +7,19 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
+  Image,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Text,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
-import { Operations, RecordV1, initial } from "./src/domain/state";
-import { importRecipient } from "./src/domain/import";
-import { load, pickQR, removeImage, store } from "./src/services/platform";
-import { styles as s } from "./src/screens/common";
+import { RecordV1, initial, migrate, legacyImages } from "./src/domain/state";
+
+import { load, store, removeImage } from "./src/services/platform";
+import { Action, styles as s } from "./src/screens/common";
 type AppState = {
   record: RecordV1;
   busy: boolean;
@@ -42,75 +44,90 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     latest = useRef(initial);
   const [loaded, setLoaded] = useState(false),
     [busy, setBusy] = useState(false);
-  const operations = useRef(new Operations()),
-    commit = useRef(false);
-  const report = (message: string) => Alert.alert("BluePeso", message);
+  const [loadError, setLoadError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
+
+  const pendingImages = useRef<string[]>([]);
+  async function cleanLegacyImages() {
+    const pending = pendingImages.current;
+    pendingImages.current = [];
+    for (const uri of pending) {
+      try {
+        await removeImage(uri);
+      } catch {
+        pendingImages.current.push(uri);
+      }
+    }
+  }
+  const report = (message: string) => Alert.alert("PayQR", message);
   useEffect(() => {
     void load()
-      .then((r) => {
-        latest.current = r;
-        setRecord(r);
+      .then(async (r) => {
+        pendingImages.current = legacyImages(r);
+        const migrated = migrate(r);
+        latest.current = migrated;
+        setRecord(latest.current);
+        if (r.version !== 3)
+          await store
+            .save(migrated)
+            .then(cleanLegacyImages)
+            .catch(() =>
+              report(
+                "Could not persist the history migration. Your saved data is retained; retry by saving an entry.",
+              ),
+            );
       })
-      .catch((e) =>
-        report(
-          `${e.message} Your stored record has not been treated as valid. Import a QR again.`,
-        ),
-      )
+      .catch(() => setLoadError("Your saved history could not be opened safely. Your data has been retained. Unlock your device and retry. If you just updated PayQR, install the new app build."))
       .finally(() => setLoaded(true));
-  }, []);
+  }, [loadAttempt]);
   // Every mutation runs through this queue and derives from the latest committed record.
   const mutation = useRef<Promise<unknown>>(Promise.resolve());
   function patch(transform: (r: RecordV1) => RecordV1): Promise<void> {
     const next = mutation.current
       .catch(() => {})
       .then(async () => {
-        const r = transform(latest.current);
+        const r = transform(migrate(latest.current));
         await store.save(r);
         latest.current = r;
         setRecord(r);
+        await cleanLegacyImages();
       });
     mutation.current = next;
     return next;
   }
   async function importQR() {
-    const id = operations.current.begin();
-    setBusy(true);
-    try {
-      await importRecipient(
-        id,
-        operations.current,
-        pickQR,
-        patch,
-        removeImage,
-        () => {
-          commit.current = true;
-        },
-      );
-    } catch (e) {
-      if (operations.current.current(id))
-        report(
-          e instanceof Error
-            ? e.message
-            : "QR import failed. Previous recipient retained.",
-        );
-    } finally {
-      if (operations.current.current(id)) {
-        commit.current = false;
-        setBusy(false);
-      }
-    }
+    /* Imports are staged in Settings. */
   }
+  if (loaded && loadError)
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={[s.page, { padding: 24, justifyContent: "center", gap: 18 }]}>
+          <Text style={s.text}>{loadError}</Text>
+          <Action title="Retry loading history" onPress={() => {
+            setLoaded(false);
+            setLoadError("");
+            setLoadAttempt((attempt) => attempt + 1);
+          }} />
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
   if ((!fonts && !fontError) || !loaded)
     return (
       <SafeAreaProvider>
-        <SafeAreaView style={[s.page, { justifyContent: "center" }]}>
-          <ActivityIndicator accessibilityLabel="Loading BluePeso" />
+        <SafeAreaView style={[s.page, { justifyContent: "center", alignItems: "center", backgroundColor: "#ffffff", gap: 24 }]}>
+          <Image
+            source={require("./assets/splash-icon.png")}
+            style={{ width: 180, height: 180 }}
+            resizeMode="contain"
+            accessibilityLabel="PayQR logo"
+          />
+          <ActivityIndicator accessibilityLabel="Loading PayQR" />
         </SafeAreaView>
       </SafeAreaProvider>
     );
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={s.page}>
+      <SafeAreaView style={s.page} edges={["top", "left", "right"]}>
         <StatusBar style="dark" />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
@@ -123,12 +140,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               patch,
               importQR,
               report,
-              cancel: () => {
-                if (!commit.current) {
-                  operations.current.cancel();
-                  setBusy(false);
-                }
-              },
+              cancel: () => setBusy(false),
             }}
           >
             {children}

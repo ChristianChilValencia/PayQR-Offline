@@ -1,20 +1,39 @@
 {
   "expo": {
-    "name": "BluePeso",
-    "slug": "bluepeso",
+    "name": "PayQR",
+    "slug": "payqr",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "android": {
-      "package": "com.bluepeso.helper",
+      "allowBackup": false,
+      "package": "com.payqr.helper",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#11274a"
+        "backgroundColor": "#ffffff"
       },
-      "blockedPermissions": ["android.permission.RECORD_AUDIO"]
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
       "expo-font",
       [
         "expo-camera",
@@ -33,11 +52,38 @@
         {
           "photosPermission": "Choose payment QR images.",
           "savePhotosPermission": "Save a payment card PNG.",
-          "granularPermissions": ["photo"]
+          "granularPermissions": [
+            "photo"
+          ]
         }
       ],
       "expo-sharing",
-      "expo-router"
-    ]
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "ios": {
+      "bundleIdentifier": "com.payqr.helper",
+      "supportsTablet": true,
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "gcash"
+        ]
+      }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ebb67af1-2ac5-4d18-8537-989fb3413ba2"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ebb67af1-2ac5-4d18-8537-989fb3413ba2"
+    }
   }
 }

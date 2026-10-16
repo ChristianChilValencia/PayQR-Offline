@@ -1,29 +1,59 @@
+import { APP_TARGET_SCHEME, readPackageTarget } from "./launcher";
 export const MAX_PESOS = 999999999;
 export function pesosToCentavos(text: string): number | null {
-  return /^(0|[1-9]\d{0,8})$/.test(text) ? Number(text) * 100 : null;
+  if (!/^(0|[1-9]\d{0,8})(?:\.\d{1,2})?$/.test(text)) return null;
+  const [whole, fraction = ""] = text.split(".");
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  return cents <= MAX_PESOS * 100 ? cents : null;
 }
 export function wireAmount(cents: number): string {
   if (!Number.isSafeInteger(cents) || cents < 0 || cents > MAX_PESOS * 100)
     throw new Error("Invalid amount");
   return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, "0")}`;
 }
+export function displayAmount(cents: number): string {
+  const value = wireAmount(cents);
+  return cents % 100 === 0 ? value.slice(0, -3) : value;
+}
 export function money(cents: number): string {
-  return `₱${wireAmount(cents)}`;
+  return `₱${displayAmount(cents)}`;
 }
 export function normalizePhone(value: string): string | null {
-  if (!/^[+\d -]+$/.test(value)) return null;
-  const clean = value.replace(/[ -]/g, "");
+  if (!/^\+?\d+(?:[ -]\d+)*$/.test(value.trim())) return null;
+  const clean = value.trim().replace(/[ -]/g, "");
   return /^09\d{9}$/.test(clean)
     ? clean
-    : /^\+639\d{9}$/.test(clean)
-      ? "0" + clean.slice(3)
+    : /^\+?639\d{9}$/.test(clean)
+      ? "0" + clean.replace(/^\+/, "").slice(2)
       : null;
+}
+/** Accept partial typing; country codes become local as soon as the mobile prefix is known. */
+export function editPhone(value: string): string | null {
+  const full = normalizePhone(value);
+  if (full) return full;
+  if (["+", "+6", "+63"].includes(value)) return value;
+  if (/^\+63\d{1,9}$/.test(value)) {
+    const local = value.slice(3);
+    return local.startsWith("9") ? "0" + local : "09" + local;
+  }
+  if (/^\+6[0-245789]\d{0,8}$/.test(value)) {
+    const local = value.slice(2);
+    return local.startsWith("9") ? "0" + local : "09" + local;
+  }
+  if (/^\+?639\d{0,8}$/.test(value))
+    return "0" + value.replace(/^\+/, "").slice(2);
+  if (!/^\d{0,11}$/.test(value)) return null;
+  if (/^0[0-8]\d{0,8}$/.test(value)) return "09" + value.slice(1);
+  if (/^[1-9]\d{8}$/.test(value) && !value.startsWith("63")) return "09" + value;
+  if (/^9\d{0,9}$/.test(value)) return "0" + value;
+  if (/^[1-8]\d{0,8}$/.test(value)) return "09" + value;
+  return value;
 }
 export function findPhones(text: string): string[] {
   return [
     ...new Set(
       Array.from(
-        text.matchAll(/(?<![\d+])(?:09|\+639)(?:[ -]*\d){9}(?![ -]*\d)/g),
+        text.matchAll(/(?<![\d+])(?:09|\+?639)(?:[ -]*\d){9}(?![ -]*\d)/g),
         (m) => normalizePhone(m[0]),
       ).filter((x): x is string => x !== null),
     ),
@@ -39,7 +69,7 @@ export type Field = { id: string; value: string };
 export function parseTLV(payload: string): Field[] {
   if (!/^[\x20-\x7e]+$/.test(payload)) throw new Error("Unsupported encoding");
   const fields: Field[] = [];
-  for (let pos = 0; pos < payload.length; ) {
+  for (let pos = 0; pos < payload.length;) {
     const head = payload.slice(pos, pos + 4);
     if (!/^\d{4}$/.test(head)) throw new Error("Malformed QR fields");
     const length = Number(head.slice(2)),
@@ -80,8 +110,6 @@ export type QRValidation = {
   structure?: boolean;
   existingAmount?: string;
 };
-// Intentionally empty. Only evidence from a legitimate recipient may add a profile.
-const APPROVED_ROUTING: readonly string[] = [];
 export function validateQR(payload: string): QRValidation {
   if (!payload || payload.length > 4096 || /[\x00-\x1f]/.test(payload))
     throw new Error("Invalid QR");
@@ -129,7 +157,11 @@ export function validateQR(payload: string): QRValidation {
     !!get("60")?.trim() &&
     (get("60")?.length ?? 0) <= 15 &&
     routing.length > 0;
-  const eligible = structure && APPROVED_ROUTING.includes(serialize(routing));
+  const eligible =
+    structure &&
+    (get("54") === undefined ||
+      /^(0|[1-9]\d*)(?:\.\d{1,2})?$/.test(get("54")!)) &&
+    !["55", "56", "57"].some((id) => get(id) !== undefined);
   return {
     ...fallback,
     status: eligible ? "Original QR" : fallback.status,
@@ -139,7 +171,7 @@ export function validateQR(payload: string): QRValidation {
     eligible,
   };
 }
-/** Engine takes an explicit evidence predicate; production uses validateQR's empty allowlist. */
+/** Rewrite supported PHP EMV templates; wallet acceptance requires a device scan. */
 export function rewriteAmount(
   payload: string,
   cents: number,
@@ -175,6 +207,7 @@ export function validateLink(value: string): string | null {
   if (!value || /[\s\x00-\x1f\x7f]/.test(value)) return null;
   try {
     const u = new URL(value);
+    if (u.protocol === APP_TARGET_SCHEME) readPackageTarget(value);
     if (
       !/^[a-z][a-z0-9+.-]*:$/i.test(u.protocol) ||
       [

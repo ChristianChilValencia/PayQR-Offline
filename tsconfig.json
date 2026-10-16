@@ -3,5 +3,6 @@
   "compilerOptions": {
     "strict": true,
     "types": ["jest", "react", "react-native", "node"]
-  }
+  },
+  "exclude": ["node_modules", "artifacts", "dist", "dist-android", "web-build", "coverage", "android", "ios"]
 }

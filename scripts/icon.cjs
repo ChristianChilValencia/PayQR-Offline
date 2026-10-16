@@ -1,11 +1,16 @@
+/* global __dirname */
 const sharp = require("sharp");
-const { Buffer } = require("buffer");
-const artwork =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024"><rect width="1024" height="1024" rx="220" fill="#11274a"/><rect x="176" y="176" width="672" height="672" rx="160" fill="#075cce"/><path d="M386 308h146c160 0 160 216 0 216H386m0-216v408m-64-320h330m-330 58h330" fill="none" stroke="white" stroke-width="50" stroke-linecap="round"/><rect x="658" y="644" width="54" height="54" rx="9" fill="white"/><rect x="732" y="644" width="54" height="54" rx="9" fill="white"/><rect x="658" y="718" width="54" height="54" rx="9" fill="white"/></svg>';
-Promise.all(
-  ["icon.png", "adaptive-icon.png"].map((name) =>
-    sharp(Buffer.from(artwork))
-      .png()
-      .toFile("assets/" + name),
-  ),
-);
+const path = require("path");
+const assets = path.join(__dirname, "..", "assets");
+const source = path.join(assets, "PayQR_logo.png");
+
+async function generate() {
+  // Preserve the transparent source corners in every generated asset.
+  await sharp(source).resize(1024, 1024, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toFile(path.join(assets, "icon.png"));
+  await sharp(source).resize(512, 512, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toFile(path.join(assets, "splash-icon.png"));
+  // Android adaptive masks need breathing room around the complete logo.
+  const foreground = await sharp(source).resize(640, 640, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+  await sharp({ create: { width: 1024, height: 1024, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } } }).composite([{ input: foreground, gravity: "centre" }]).png().toFile(path.join(assets, "adaptive-icon.png"));
+  await sharp(source).resize(48, 48, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toFile(path.join(assets, "favicon.png"));
+}
+generate().catch((error) => { console.error(error); process.exitCode = 1; });

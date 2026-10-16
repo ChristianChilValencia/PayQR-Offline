@@ -25,7 +25,9 @@ test.each([
   "01",
   " 1",
   "1 ",
-  "1.0",
+  "1.001",
+  "1..0",
+  "999999999.01",
   "-1",
   "+1",
   "1e3",
@@ -107,7 +109,7 @@ test("amount insertion, indicator, CRC and unknown routing preserved", () => {
   );
   expect(validateQR(out).recipient).toBe("TEST ONLY");
   expect(rewriteAmount(p, 0, () => true)).toBe(p);
-  expect(rewriteAmount(p, 12300)).toBe(p);
+  expect(rewriteAmount(p, 12300)).toBe(out);
 });
 test("replacement removes previous amount and keeps other order", () => {
   const p = fixture([
@@ -122,7 +124,7 @@ test("replacement removes previous amount and keeps other order", () => {
 });
 test("unsupported fallback never becomes approved", () => {
   expect(validateQR("https://example.com").status).toBe("Unsupported format");
-  expect(validateQR(fixture()).eligible).toBe(false);
+  expect(validateQR(fixture()).eligible).toBe(true);
   expect(rewriteAmount("https://example.com", 100)).toBe("https://example.com");
   expect(() => serialize([{ id: "01", value: "x".repeat(100) }])).toThrow();
 });
@@ -135,7 +137,6 @@ test.each(["09123456789", "09 123-456-789", "+63 912-345-6789"])(
 test.each([
   "0912345678",
   "091234567890",
-  "639123456789",
   "text",
   "+63912345678",
 ])("reject phone %s", (value) => expect(normalizePhone(value)).toBeNull());
@@ -173,11 +174,11 @@ test("hydration validates version, cents, payload and recalculates profile", () 
       validation: { eligible: true },
     },
   };
-  expect(hydrate(JSON.stringify(r)).recipient?.validation.eligible).toBe(false);
+  expect(hydrate(JSON.stringify(r)).recipient?.validation.eligible).toBe(true);
   for (const bad of [
     { ...r, version: 2 },
     { ...r, cents: -1 },
-    { ...r, cents: 1 },
+    { ...r, cents: 0.5 },
     { ...r, link: "file:///a" },
     { ...r, recipient: { image: "http://a", payload: fixture() } },
   ])
@@ -219,4 +220,9 @@ test("clipboard failure prevents launch; launch failure preserves successful cop
   expect(copy.mock.invocationCallOrder[0]).toBeLessThan(
     open.mock.invocationCallOrder[0],
   );
+});
+
+test.each([["250", 25000], ["250.5", 25050], ["250.00", 25000], ["0.01", 1], ["999999999.00", 99999999900]])("exact decimal parsing %s", (text, cents) => {
+  expect(pesosToCentavos(String(text))).toBe(cents);
+  expect(hydrate(JSON.stringify({ ...initial, cents })).cents).toBe(cents);
 });

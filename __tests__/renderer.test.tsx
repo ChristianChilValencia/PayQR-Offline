@@ -66,7 +66,10 @@ test("app QR renderer produces independently decodable exact-payload PNG", async
   await act(async () => {
     tree = renderer.create(<PaymentCard snapshot={snapshot} />);
   });
+  const card = tree!.root.findAll(node => typeof node.props.onLayout === "function")[0];
+  await act(async () => { card.props.onLayout({ nativeEvent: { layout: { width: 212 } } }); });
   const svg = tree!.root.findByType("svg" as any);
+  expect(Number(svg.props.width)).toBeLessThanOrEqual(212);
   const source = svgMarkup(svg).replace(
     "<svg ",
     '<svg xmlns="http://www.w3.org/2000/svg" ',
@@ -94,4 +97,18 @@ test("app QR renderer produces independently decodable exact-payload PNG", async
   await act(async () => {
     tree!.unmount();
   });
+});
+
+
+test("larger QR still reserves room for text on short Receive cards", async () => {
+  const payload = fixture();
+  const snapshot = paymentSnapshot({ payload, validation: validateQR(payload), label: "Shop" }, 10000);
+  let tree!: renderer.ReactTestRenderer;
+  await act(async () => { tree = renderer.create(<PaymentCard snapshot={snapshot} maxHeight={600} />); });
+  const layout = () => tree.root.findAll(node => typeof node.props.onLayout === "function")[0];
+  await act(async () => layout().props.onLayout({ nativeEvent: { layout: { width: 360 } } }));
+  expect(Number(tree.root.findByType("svg" as any).props.width)).toBeGreaterThan(300);
+  await act(async () => tree.update(<PaymentCard snapshot={snapshot} maxHeight={280} />));
+  expect(Number(tree.root.findByType("svg" as any).props.width)).toBeLessThanOrEqual(130);
+  await act(async () => tree.unmount());
 });

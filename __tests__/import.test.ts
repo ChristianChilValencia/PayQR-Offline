@@ -1,95 +1,46 @@
-import { importRecipient } from "../src/domain/import";
-import { Operations, RecordV1, Recipient, initial } from "../src/domain/state";
+import { saveRecipient, deleteRecipient } from "../src/domain/import";
+import { initial } from "../src/domain/state";
 import { validateQR } from "../src/domain/core";
-import { fixture } from "./fixture";
-const qr = (name: string): Recipient => ({
-  image: "file:///" + name,
-  payload: fixture(),
-  validation: validateQR(fixture()),
+const qr = (image: string, payload: string) => ({
+  image,
+  payload,
+  validation: validateQR(payload),
 });
-test("failed metadata write retains previous recipient and cleans staged file", async () => {
-  const o = new Operations(),
-    old = qr("old"),
-    fresh = qr("fresh");
-  const record = { ...initial, recipient: old };
-  const remove = jest.fn().mockResolvedValue(undefined);
-  await expect(
-    importRecipient(
-      o.begin(),
-      o,
-      async () => fresh,
-      async (transform) => {
-        transform(record);
-        throw new Error("disk");
-      },
-      remove,
-    ),
-  ).rejects.toThrow("disk");
-  expect(record.recipient).toEqual(old);
-  expect(remove).toHaveBeenCalledWith(fresh.image);
-  expect(remove).not.toHaveBeenCalledWith(old.image);
-});
-test.each(["cancel", "supersede"])(
-  "%s during selection discards staging",
-  async (mode) => {
-    const o = new Operations(),
-      id = o.begin(),
-      remove = jest.fn().mockResolvedValue(undefined),
-      patch = jest.fn();
-    await importRecipient(
-      id,
-      o,
-      async () => {
-        if (mode === "cancel") o.cancel();
-        else o.begin();
-        return qr("new");
-      },
-      patch,
-      remove,
-    );
-    expect(patch).not.toHaveBeenCalled();
-    expect(remove).toHaveBeenCalledWith("file:///new");
-  },
-);
-test("superseded while waiting for metadata queue retains active record", async () => {
-  const o = new Operations(),
-    id = o.begin(),
-    remove = jest.fn().mockResolvedValue(undefined);
-  await expect(
-    importRecipient(
-      id,
-      o,
-      async () => qr("new"),
-      async (transform) => {
-        o.cancel();
-        transform(initial);
-      },
-      remove,
-    ),
-  ).rejects.toThrow("cancelled");
-  expect(remove).toHaveBeenCalledWith("file:///new");
-});
-test("commit precedes obsolete image cleanup and preserves concurrent settings", async () => {
-  const o = new Operations();
-  let record: RecordV1 = {
-    ...initial,
-    recipient: qr("old"),
-    link: "my:link",
-    cents: 200,
-  };
-  const remove = jest.fn(async () => {
-    expect(record.recipient?.image).toBe("file:///new");
-  });
-  await importRecipient(
-    o.begin(),
-    o,
-    async () => qr("new"),
-    async (transform) => {
-      record = transform(record);
-    },
-    remove,
+test("new imports retain payload history, amount and app without images", () => {
+  const old = qr("file:///old", "old payload");
+  const r = saveRecipient(
+    { ...initial, recipient: old, cents: 200, link: "my:link" },
+    qr("file:///new", "new payload"),
   );
-  expect(record.cents).toBe(200);
-  expect(record.link).toBe("my:link");
-  expect(remove).toHaveBeenCalledWith("file:///old");
+  expect(r.record.qrs).toHaveLength(2);
+  expect(r.record.qrs?.every((q) => q.image === undefined)).toBe(true);
+  expect(r.record.cents).toBe(200);
+  expect(r.record.link).toBe("my:link");
+  expect(r.record.recipient?.payload).toBe("new payload");
+});
+test("payload deduplication keeps the identifier and stores no image", () => {
+  const first = saveRecipient(
+    initial,
+    qr("file:///old", "same payload"),
+  ).record;
+  const r = saveRecipient(first, qr("file:///new", "same payload"));
+  expect(r.record.qrs).toHaveLength(1);
+  expect(r.record.activeQR).toBe(first.activeQR);
+  expect(r.record.recipient?.image).toBeUndefined();
+});
+test("deleting active entry clears selection and preserves other history", () => {
+  const first = saveRecipient(initial, qr("file:///old", "old payload")).record;
+  const next = saveRecipient(first, qr("file:///new", "new payload")).record;
+  const r = deleteRecipient(next, next.activeQR!);
+  expect(r.record.recipient).toBeNull();
+  expect(r.record.activeQR).toBeNull();
+  expect(r.record.qrs).toEqual(first.qrs);
+});
+test("legacy image fields cannot enter a newly saved QR record", () => {
+  const result = saveRecipient(
+    initial,
+    qr("data:image/png;base64,PRIVATE_IMAGE", "payload"),
+  );
+  expect(JSON.stringify(result.record)).not.toContain("PRIVATE_IMAGE");
+  expect(result.record.version).toBe(3);
 });

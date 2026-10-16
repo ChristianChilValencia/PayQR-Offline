@@ -1,3 +1,14 @@
+# Dynamic QR and Expo Go update - 2026-10-16
+
+Current behavior supersedes historical whole-peso/empty-allowlist notes below.
+
+- Implemented decimal parsing/storage, supported PHP EMV rewriting, measured QR sizing with four-module quiet zone, compact hold controls, icon tooltips, frozen exports, and Expo Go supported-link fallback.
+- Tagpila inspected read-only: `D:/Documents/TagpilaProject v1 beta/src/app/utils/emv-qr.util.ts`. Amount formatting, initiation flag and CRC behavior match. That version appends field 54 before CRC; this plan inserts it after currency 53. Output is therefore not byte-identical; untouched fields retain their order.
+- ESLint and TypeScript passed; all 89 Jest tests passed. Android/iOS/web production exports passed. Tests cover decimals, bounds, hydration, rapid/incomplete edits, save failures, repeat/release/cancellation/unmount, tooltips, frozen export, native launcher and Expo Go fallback. Sharp/jsQR independently decodes the actual QR renderer PNG at a small measured width.
+- Physical Android Expo Go import, gallery permissions/save, PNG sharing, app opening, gestures, and real GCash recipient/amount acceptance remain pending. Native APK discovery/launch also needs a device. No transfer or payment confirmation performed.
+
+---
+
 # Verification — 2026-10-15
 
 Implemented against Expo SDK 57, with the SDK resolver selecting Expo 57.0.30, React 19.2.3 and React Native 0.86.3. Both reference directories were read only.
@@ -11,7 +22,7 @@ Implemented against Expo SDK 57, with the SDK resolver selecting Expo 57.0.30, R
 | Jest `npm test` | 70 tests across 5 suites passed |
 | `npx expo install --check` | Dependencies up to date |
 | `npx expo-doctor` | 21/21 checks passed |
-| `npx expo config --type public --json` | Passed; BluePeso, SDK 57, configured native plugins; no credentials |
+| `npx expo config --type public --json` | Passed; PayQR, SDK 57, configured native plugins; no credentials |
 | `npx expo export --platform android` | Passed; Hermes bundle and bundled fonts exported to ignored `dist/` |
 | `npx expo start --go --port 8081` | Metro started; `/status` returned `packager-status:running` |
 | Android device availability | `adb devices` returned an empty device list |
@@ -36,7 +47,7 @@ Suggested fixes for the affected direct packages include changing SDK/framework 
 
 ## Pending Android checklist
 
-- [ ] Open BluePeso using SDK 57 Expo Go on a real Android phone. Record device, Android and Expo Go versions.
+- [ ] Open PayQR using SDK 57 Expo Go on a real Android phone. Record device, Android and Expo Go versions.
 - [ ] Inspect small-screen layout, large text, scrolling, keyboard avoidance and all three persistent tabs.
 - [ ] Import a legitimate recipient QR. Confirm its original recipient in GCash; test cancellation, unreadable/malformed images, multiple QR images and superseded imports without losing the active recipient.
 - [ ] Confirm zero displays the unchanged original QR, exports are disabled, invalid pasted amounts stay visible, and ±₱1 stops at the technical bounds.
@@ -50,3 +61,67 @@ Suggested fixes for the affected direct packages include changing SDK/framework 
 - [ ] If an APK is built later, install the EAS preview APK and test local QR rendering, persistence and number recognition without network. Record GCash connectivity separately.
 
 No money transfer, provider request, payment confirmation, installed-app enumeration or image OCR was performed. The original-QR flow is implemented; real GCash compatibility and payment acceptance remain unverified.
+
+## PayQR app picker and rename � 2026-10-16
+
+- Typecheck and ESLint passed.
+- All 77 tests passed after adding launcher coverage; an additional storage migration test subsequently passed (78 tests in total).
+- Expo public config resolves PayQR and com.payqr.helper on Android/iOS.
+- Expo autolinking detects PayQRLauncherModule on Android and excludes it on Apple.
+- Amount entry occupies a full row above four equal-width step buttons; the card branding text is removed.
+- Android picker includes searchable names/icons, persisted selection, native launch, and unavailable-module handling in Expo Go.
+- iPhone picker checks the declared GCash scheme; other apps can use a custom link.
+- Native Android compilation, physical-device app discovery/launch and iPhone URL-handler checks remain unverified. A new APK is required for the local native module.
+
+- Android, iOS and web production bundle exports passed (
+px expo export --platform all --output-dir artifacts/payqr-export).
+- Folder rename to D:\Documents\PayQR is pending a Windows workspace lock. A hidden helper retries for one hour and refuses to overwrite an existing destination.
+
+
+## Camera OCR and installed payment apps (2026-10-16)
+
+Implemented capture-based rear-camera scanning in `/scan`, bundled ML Kit Latin OCR in the local `payqr-ocr` Expo module, temporary photo cleanup, explicit result selection and manual correction. Android uses installed package targets only; saved package selections keep their existing storage format. Legacy URL selections require reselection without changing the QR or amount. The Android picker refreshes launchable apps, groups verified payment package IDs first, and searches remaining apps. Development-client scripts and EAS development APK profile are configured; preview remains available.
+
+Automated verification includes phone normalization/deduplication/invalid lengths, explicit selection even for one result, manual correction, OCR success/no-results/failure/cancellation and cleanup, camera permission denial, exact-package grouping/search, existing saved package target roundtrips, and copy-before-launch failures. Native autolinking resolves both PayQRLauncher and PayQROCR. Android JS export succeeds; this does not compile Kotlin or verify ML Kit on a device.
+
+Physical verification remains pending: `adb devices -l` showed no attached devices. No EAS build was submitted and no native APK was compiled in this session. First-use OCR in airplane mode, permission grant/permanent-denial recovery, camera focus/orientation and multiple-number recognition need a physical Android development build. Direct launches of GCash, GoTyme, MariBank PH, Maya and PayPal are all untested because no phone is available; no claim is made that any was installed or launched.
+
+Build using `npx eas-cli@latest build --platform android --profile development`, install the APK, and run `npm start`. After installation, enable airplane mode before the first capture and confirm that OCR still works. Test Cancel while OCR is pending, retake after failure/no results, select each detected number, and confirm no copying occurs until a copy button is tapped. Test each installed named app through Test App and Copy & Open App, then uninstall a selected app and confirm a clear error while retaining a successfully copied number. Record which apps are absent from the test phone.
+
+Checks for this change: lint and TypeScript passed; all 101 tests across 10 suites passed; Expo dependency versions are up to date; Expo Doctor passed 21/21 checks; final Android JavaScript export passed. Native compilation and physical-device verification remain pending as described above.
+
+## Three tabs and offline history (2026-10-16)
+
+Implemented QR, Number and Settings bottom tabs with QR as the initial route. OCR remains a separate stack screen. The amount footer belongs only to QR; QR Reset changes only the amount. Number input uses a fixed 09 prefix, strict suffix entry and complete-number paste normalization. Complete OCR candidates save automatically; manual/corrected entries have an explicit Save Number action.
+
+Version 2 history migrates the original recipient, amount and app, retains serialized metadata writes, and deduplicates QR payloads, normalized numbers and app package/link targets. Imports stay in an unsaved Settings preview until Save succeeds. Failed saves retain the draft for retry. Reset, replacement and leaving Settings clean staged images. Record deletion requires confirmation; image cleanup follows a successful metadata commit and respects other records referencing the image. Both tabs use the same frozen payment-card export flow.
+
+The app chooser is an animated 75% bottom sheet with header-only dragging, backdrop/Cancel/system-back dismissal, search, selected indicators and a 30/70 footer. Its custom-link form stays inside the sheet, retains platform validation and disables dismissal during saving.
+
+Verification: lint and TypeScript passed; all 119 tests across 13 suites passed. Coverage includes migration/restart recovery, normalized-number deduplication and invalid pastes, preview/reset/replacement/navigation cleanup, save-failure retry, QR history retention/deletion/shared-image ownership, app-sheet dismissal and custom-link save validation. Android JavaScript and web bundle exports passed. Artifacts are in ignored artifacts/tab-layout-android and artifacts/tab-layout-check.
+
+Manual Android verification remains pending: adb devices returned no attached devices or emulators. No APK was compiled or installed and no GCash scan was performed. Check cold-launch QR selection, tab switching and keyboard/safe-area layout, header drag versus results scrolling, native Android Back, system share/gallery permissions, offline restart recovery and real recipient/amount scanability in the development build.
+
+## Payload-only QR history and vector controls (2026-10-16)
+
+Replaced text-symbol icons with a consistent outline SVG icon set, using the existing react-native-svg dependency. Visually reviewed the generated icon contact sheet at artifacts/icon-review.png. Buttons retain accessible labels and 48-point minimum touch targets.
+
+QR imports now return only the decoded payload and validation. No private image copy or base64 image is saved. Previews and history thumbnails render directly from the original payload; explicit Share and Download still generate a temporary payment card or user-requested export. Version 3 migrates version 1/2 records while preserving payload history, amount, numbers and app selection. Existing app-owned QR copies are removed only after metadata persistence succeeds; cleanup rejects original photos, unrelated files and traversal paths. Missing legacy image files no longer prevent recovery from the saved QR payload.
+
+The Number input is now a single full-number field, without a separate fixed 09 label. A leading 9 becomes 09 automatically, and typing +639 or 639 converts to the local prefix. A partial +63 is accepted while typing; malformed characters and overlong numbers remain rejected. Scan Camera and Copy & Open App have vector icons and share a fixed footer above the Number tab bar, outside the scrolling content. The camera capture button also has its own icon.
+
+Lint and TypeScript passed. Android JavaScript bundle export passed at artifacts/payload-icons-android. Automated coverage includes payload-only serialization, both legacy migration formats, recovery without image files, guarded image cleanup, incremental country-code typing and the fixed Number action footer. Manual Android verification remains pending: adb devices listed no attached device or emulator. No APK was compiled or installed in this session.
+Final automated verification for this update: lint and typecheck passed; all 123 tests across 14 suites passed.
+
+## Lucide icon components (2026-10-16)
+
+Replaced the local icon drawings with Lucide React Native components across tabs, buttons and status indicators. Per-icon package exports keep the production bundle focused on the icons actually used. Jest now transforms Lucide's native ESM modules so tests render the real components. Lint, typecheck, all 123 tests and the Android JavaScript bundle export passed. Bundle output: artifacts/lucide-icons-android. Native device visual verification remains pending.
+
+
+### Number layout and confirmation sheets (2026-10-16)
+
+- Saved-number matching uses normalized local numbers from persisted history on both Number and OCR results. Save Number and Copy Number disable for saved values and re-enable after correction to a new valid number.
+- Number content fills available height; guidance and validation appear above the card, with input and actions at its bottom.
+- QR, number, and app deletion use red actions and a confirmation bottom sheet. Storage failure retains the confirmation for retry; successful active-entry deletion clears its selection.
+- App chooser and deletion sheets animate only their panels, with a stationary dimmed backdrop.
+- All 126 tests passed; Android export succeeded at `artifacts/layout-sheets-android`. No Android device/emulator was connected, so native gesture and visual checks remain unverified.

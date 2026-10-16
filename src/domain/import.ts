@@ -1,28 +1,28 @@
-import { Operations, Recipient, RecordV1 } from "./state";
-/** Metadata commit is the cancellation boundary. Files are staged before it. */
-export async function importRecipient(
-  id: number,
-  operations: Operations,
-  pick: () => Promise<Recipient | null>,
-  patch: (transform: (r: RecordV1) => RecordV1) => Promise<void>,
-  remove: (uri: string) => Promise<void>,
-  committing: () => void = () => {},
-) {
-  let staged: Recipient | null = null;
-  try {
-    staged = await pick();
-    if (!staged || !operations.current(id)) return;
-    const accepted = staged;
-    let old: string | undefined;
-    await patch((r) => {
-      if (!operations.current(id)) throw new Error("Import cancelled");
-      committing();
-      old = r.recipient?.image;
-      return { ...r, recipient: accepted };
-    });
-    staged = null;
-    if (old) await remove(old);
-  } finally {
-    if (staged) await remove(staged.image);
-  }
+import { cleanLabel, migrate, Recipient, RecordV1, SavedQR } from "./state";
+
+/** Only commit the returned record after storage succeeds. */
+export function saveRecipient(record: RecordV1, recipient: Recipient) {
+  const r = migrate(record);
+  const existing = r.qrs?.find((q) => q.payload === recipient.payload);
+  const qr: SavedQR = {
+    label: cleanLabel(recipient.label) ?? existing?.label,
+    payload: recipient.payload,
+    validation: recipient.validation,
+    id: existing?.id ?? `${Date.now()}-${Math.random()}`,
+    date: new Date().toISOString(),
+  };
+  const qrs = [qr, ...(r.qrs ?? []).filter((q) => q.payload !== qr.payload)];
+  return { record: { ...r, recipient: qr, activeQR: qr.id, qrs } };
+}
+
+/** Cleanup is safe only after this record has been successfully persisted. */
+export function deleteRecipient(r: RecordV1, id: string) {
+  const qrs = (r.qrs ?? []).filter((q) => q.id !== id);
+  return {
+    record: {
+      ...r,
+      qrs,
+      ...(r.activeQR === id ? { activeQR: null, recipient: null } : {}),
+    },
+  };
 }

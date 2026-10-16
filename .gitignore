@@ -13,6 +13,9 @@ expo-env.d.ts
 .kotlin/
 *.orig.*
 *.jks
+*.keystore
+credentials.json
+.secrets/
 *.p8
 *.p12
 *.key
@@ -47,3 +50,5 @@ artifacts/
 coverage/
 *.apk
 *.aab
+
+/dist-android/
